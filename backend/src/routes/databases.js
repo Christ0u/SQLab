@@ -2,6 +2,8 @@ const express = require('express')
 const sql = require('mssql')
 const router = express.Router()
 
+const SYSTEM_DATABASES = ['master', 'model', 'msdb', 'tempdb']
+
 router.get('/', async (req, res) => {
     if (!req.session.connected) {
         return res.status(401).json({ error: 'Non connecté' })
@@ -25,6 +27,37 @@ router.get('/', async (req, res) => {
             ORDER BY d.name
         `)
         res.json(result.recordset)
+    } catch (err) {
+        res.status(500).json({ error: err.message })
+    }
+})
+
+router.delete('/:name', async (req, res) => {
+    if (!req.session.connected) {
+        return res.status(401).json({ error: 'Non connecté' })
+    }
+
+    const { name } = req.params
+
+    if (SYSTEM_DATABASES.includes(name.toLowerCase())) {
+        return res.status(403).json({ error: `"${name}" est une base système protégée.` })
+    }
+
+    // Vérifier que le nom ne contient que des caractères valides (sécurité)
+    if (!/^[\w\-. ]+$/.test(name)) {
+        return res.status(400).json({ error: 'Nom de base de données invalide.' })
+    }
+
+    try {
+        const pool = await sql.connect(req.session.sqlConfig)
+
+        // Forcer la déconnexion des autres sessions avant suppression
+        await pool.request().query(`
+            ALTER DATABASE [${name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE
+        `)
+        await pool.request().query(`DROP DATABASE [${name}]`)
+
+        res.json({ success: true })
     } catch (err) {
         res.status(500).json({ error: err.message })
     }
