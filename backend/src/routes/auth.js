@@ -12,6 +12,10 @@ router.get('/defaults', (req, res) => {
     })
 })
 
+router.get('/status', (req, res) => {
+    res.json({ connected: req.session.connected === true })
+})
+
 router.post('/connect', async (req, res) => {
     const { server, instance, port, username, password } = req.body
 

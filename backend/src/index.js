@@ -1,7 +1,9 @@
 const express = require('express')
 const cors = require('cors')
 const session = require('express-session')
+
 const authRouter = require('./routes/auth')
+const databasesRouter = require('./routes/databases')
 
 const app = express()
 
@@ -18,6 +20,7 @@ app.use(session({
 }))
 
 app.use('/api/auth', authRouter)
+app.use('/api/databases', databasesRouter)
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' })
