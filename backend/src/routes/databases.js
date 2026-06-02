@@ -137,4 +137,30 @@ router.post('/backup', async (req, res) => {
     }
 })
 
+// Route pour exécuter une requête SQL libre
+router.post('/query', async (req, res) => {
+    if (!req.session.connected) {
+        return res.status(401).json({ error: 'Non connecté' })
+    }
+
+    const { sqlQuery } = req.body
+
+    if (!sqlQuery || sqlQuery.trim() === '') {
+        return res.status(400).json({ error: 'La requête est vide.' })
+    }
+
+    try {
+        const pool = await sql.connect(req.session.sqlConfig)
+
+        // Exécution de la requête brute
+        const result = await pool.request().query(sqlQuery)
+
+        // recordset contient les lignes (SELECT). S'il n'y en a pas (ex: UPDATE, CREATE), on renvoie un tableau vide.
+        res.json({ results: result.recordset || [], rowsAffected: result.rowsAffected })
+    } catch (err) {
+        // En cas d'erreur de syntaxe ou autre, on renvoie le message d'erreur SQL
+        res.status(400).json({ error: err.message })
+    }
+})
+
 module.exports = router
