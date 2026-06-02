@@ -14,6 +14,12 @@ interface CreateForm {
     recoveryModel: string
 }
 
+interface BackupForm {
+    database: string
+    type: string
+    destination: string
+}
+
 interface Props {
     onDisconnected: () => void
 }
@@ -29,9 +35,14 @@ const COLLATIONS = [
 ]
 
 const RECOVERY_MODELS = ['SIMPLE', 'FULL', 'BULK_LOGGED']
+const BACKUP_TYPES = [
+    { value: 'FULL', label: 'Complète (FULL)' },
+    { value: 'DIFFERENTIAL', label: 'Différentielle' },
+    { value: 'LOG', label: 'Journal de transactions (LOG)' }
+]
 
 export default function Dashboard({ onDisconnected }: Props) {
-    const [section, setSection] = useState<'list' | 'create'>('list')
+    const [section, setSection] = useState<'list' | 'create' | 'backup'>('list')
 
     // -- Liste --
     const [databases, setDatabases] = useState<Database[]>([])
@@ -50,6 +61,16 @@ export default function Dashboard({ onDisconnected }: Props) {
     const [creating, setCreating] = useState(false)
     const [createError, setCreateError] = useState<string | null>(null)
     const [createSuccess, setCreateSuccess] = useState<string | null>(null)
+
+    // -- Sauvegarde --
+    const [backupForm, setBackupForm] = useState<BackupForm>({
+        database: '',
+        type: 'FULL',
+        destination: 'C:\\Users\\Public\\Downloads\\MaBase.bak'
+    })
+    const [backingUp, setBackingUp] = useState(false)
+    const [backupError, setBackupError] = useState<string | null>(null)
+    const [backupSuccess, setBackupSuccess] = useState<string | null>(null)
 
     const loadDatabases = () => {
         setLoading(true)
@@ -85,17 +106,15 @@ export default function Dashboard({ onDisconnected }: Props) {
         }
     }
 
+    // Handlers Création
     const handleCreateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setCreateForm({ ...createForm, [e.target.name]: e.target.value })
-        setCreateError(null)
-        setCreateSuccess(null)
+        setCreateError(null); setCreateSuccess(null)
     }
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault()
-        setCreating(true)
-        setCreateError(null)
-        setCreateSuccess(null)
+        setCreating(true); setCreateError(null); setCreateSuccess(null)
         try {
             const res = await fetch('/api/databases', {
                 method: 'POST',
@@ -104,9 +123,8 @@ export default function Dashboard({ onDisconnected }: Props) {
                 body: JSON.stringify(createForm)
             })
             const data = await res.json()
-            if (!res.ok) {
-                setCreateError(data.error)
-            } else {
+            if (!res.ok) setCreateError(data.error)
+            else {
                 setCreateSuccess(`La base "${createForm.name}" a été créée avec succès.`)
                 setCreateForm({ name: '', collation: 'French_CI_AS', recoveryModel: 'SIMPLE' })
                 loadDatabases()
@@ -118,13 +136,46 @@ export default function Dashboard({ onDisconnected }: Props) {
         }
     }
 
+    // Handlers Sauvegarde
+    const handleBackupChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        setBackupForm({ ...backupForm, [e.target.name]: e.target.value })
+        setBackupError(null); setBackupSuccess(null)
+    }
+
+    const handleBackup = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!backupForm.database) {
+            setBackupError('Veuillez sélectionner une base de données.'); return;
+        }
+        setBackingUp(true); setBackupError(null); setBackupSuccess(null)
+
+        try {
+            // Assure-toi que la route matche ce que tu as mis dans ton backend
+            const res = await fetch('/api/databases/backup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(backupForm)
+            })
+            const data = await res.json()
+            if (!res.ok) setBackupError(data.error)
+            else {
+                setBackupSuccess(`Sauvegarde de "${backupForm.database}" lancée et terminée avec succès.`)
+                loadDatabases() // Recharge pour mettre à jour la date de "Dernière sauvegarde"
+            }
+        } catch {
+            setBackupError('Erreur lors de la communication avec le serveur.')
+        } finally {
+            setBackingUp(false)
+        }
+    }
+
+    // Utilitaires
     const formatDate = (d: string | null) => {
         if (!d) return <span style={{ color: '#aaa' }}>Jamais</span>
         return new Date(d).toLocaleString('fr-FR')
     }
-
     const formatSize = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} Go` : `${mb} Mo`
-
     const stateColor = (state: string) => {
         switch (state) {
             case 'ONLINE': return '#2e7d32'
@@ -137,16 +188,11 @@ export default function Dashboard({ onDisconnected }: Props) {
         }
     }
 
+    // Styles
     const inputStyle = {
-        width: '100%',
-        marginTop: 4,
-        padding: '7px 10px',
-        border: '1px solid #ddd',
-        borderRadius: 4,
-        fontSize: 13,
-        boxSizing: 'border-box' as const
+        width: '100%', marginTop: 4, padding: '7px 10px', border: '1px solid #ddd',
+        borderRadius: 4, fontSize: 13, boxSizing: 'border-box' as const
     }
-
     const labelStyle = { fontSize: 12, color: '#555', fontWeight: 500 }
 
     return (
@@ -173,10 +219,11 @@ export default function Dashboard({ onDisconnected }: Props) {
                     {[
                         { key: 'list', label: 'Bases de données' },
                         { key: 'create', label: 'Créer une base' },
+                        { key: 'backup', label: 'Sauvegarder' },
                     ].map(item => (
                         <div
                             key={item.key}
-                            onClick={() => setSection(item.key as 'list' | 'create')}
+                            onClick={() => setSection(item.key as 'list' | 'create' | 'backup')}
                             style={{
                                 padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                                 background: section === item.key ? '#f0f4ff' : 'transparent',
@@ -207,7 +254,7 @@ export default function Dashboard({ onDisconnected }: Props) {
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                         <thead>
                                             <tr style={{ background: '#fafafa', borderBottom: '1px solid #e0e0e0' }}>
-                                                {['Nom', 'État', 'Taille', 'Modèle de récupération', 'Dernière sauvegarde', 'Actions'].map(h => (
+                                                {['Nom', 'État', 'Taille', 'Modèle', 'Dernière sauvegarde', 'Actions'].map(h => (
                                                     <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#555', fontSize: 12 }}>{h}</th>
                                                 ))}
                                             </tr>
@@ -235,10 +282,8 @@ export default function Dashboard({ onDisconnected }: Props) {
                                                                 disabled={isSystem}
                                                                 title={isSystem ? 'Base système protégée' : `Supprimer ${db.name}`}
                                                                 style={{
-                                                                    background: '#fff',
-                                                                    border: `1px solid ${isSystem ? '#e0e0e0' : '#ffcccc'}`,
-                                                                    color: isSystem ? '#bbb' : '#c00',
-                                                                    padding: '4px 12px', borderRadius: 4,
+                                                                    background: '#fff', border: `1px solid ${isSystem ? '#e0e0e0' : '#ffcccc'}`,
+                                                                    color: isSystem ? '#bbb' : '#c00', padding: '4px 12px', borderRadius: 4,
                                                                     cursor: isSystem ? 'not-allowed' : 'pointer', fontSize: 12
                                                                 }}
                                                             >
@@ -261,23 +306,16 @@ export default function Dashboard({ onDisconnected }: Props) {
                             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Créer une base de données</h2>
                             <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 24, maxWidth: 560 }}>
                                 <form onSubmit={handleCreate}>
-
-                                    {/* Nom */}
                                     <div style={{ marginBottom: 16 }}>
                                         <label style={labelStyle}>Nom de la base <span style={{ color: '#c00' }}>*</span></label>
-                                        <input name="name" value={createForm.name} onChange={handleCreateChange}
-                                            placeholder="MaBase" required style={inputStyle} />
+                                        <input name="name" value={createForm.name} onChange={handleCreateChange} placeholder="MaBase" required style={inputStyle} />
                                     </div>
-
-                                    {/* Collation */}
                                     <div style={{ marginBottom: 16 }}>
                                         <label style={labelStyle}>Collation</label>
                                         <select name="collation" value={createForm.collation} onChange={handleCreateChange} style={inputStyle}>
                                             {COLLATIONS.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
-
-                                    {/* Modèle de récupération */}
                                     <div style={{ marginBottom: 24 }}>
                                         <label style={labelStyle}>Modèle de récupération</label>
                                         <select name="recoveryModel" value={createForm.recoveryModel} onChange={handleCreateChange} style={inputStyle}>
@@ -286,25 +324,88 @@ export default function Dashboard({ onDisconnected }: Props) {
                                     </div>
 
                                     {createError && (
-                                        <div style={{ background: '#fff0f0', border: '1px solid #ffcccc', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#c00', marginBottom: 16 }}>
-                                            {createError}
-                                        </div>
+                                        <div style={{ background: '#fff0f0', border: '1px solid #ffcccc', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#c00', marginBottom: 16 }}>{createError}</div>
                                     )}
                                     {createSuccess && (
-                                        <div style={{ background: '#f0fff4', border: '1px solid #b2dfdb', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#2e7d32', marginBottom: 16 }}>
-                                            {createSuccess}
-                                        </div>
+                                        <div style={{ background: '#f0fff4', border: '1px solid #b2dfdb', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#2e7d32', marginBottom: 16 }}>{createSuccess}</div>
                                     )}
 
                                     <button type="submit" disabled={creating} style={{
-                                        background: '#3f51b5', border: 'none', color: '#fff',
-                                        padding: '8px 20px', borderRadius: 4, fontSize: 13,
+                                        background: '#3f51b5', border: 'none', color: '#fff', padding: '8px 20px', borderRadius: 4, fontSize: 13,
                                         cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.7 : 1
                                     }}>
                                         {creating ? 'Création...' : 'Créer la base de données'}
                                     </button>
+                                </form>
+                            </div>
+                        </>
+                    )}
+
+                    {/* ── Section Sauvegarde ── */}
+                    {section === 'backup' && (
+                        <>
+                            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Sauvegarder une base de données</h2>
+                            <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 24 }}>
+
+                                <form onSubmit={handleBackup} style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+
+                                    <div style={{ flex: '1 1 200px' }}>
+                                        <label style={labelStyle}>Base de données <span style={{ color: '#c00' }}>*</span></label>
+                                        <select name="database" value={backupForm.database} onChange={handleBackupChange} required style={inputStyle}>
+                                            <option value="" disabled>-- Sélectionner --</option>
+                                            {/* On empêche de sauvegarder tempdb (SQL Server ne l'autorise pas) */}
+                                            {databases.filter(db => db.name.toLowerCase() !== 'tempdb').map(db => (
+                                                <option key={db.name} value={db.name}>{db.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div style={{ flex: '1 1 200px' }}>
+                                        <label style={labelStyle}>Type de sauvegarde</label>
+                                        <select name="type" value={backupForm.type} onChange={handleBackupChange} style={inputStyle}>
+                                            {BACKUP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div style={{ flex: '2 1 300px' }}>
+                                        <label style={labelStyle}>Chemin de destination (sur le serveur) <span style={{ color: '#c00' }}>*</span></label>
+                                        <input
+                                            name="destination"
+                                            value={backupForm.destination}
+                                            onChange={handleBackupChange}
+                                            required
+                                            style={inputStyle}
+                                            placeholder="C:\Users\Public\Downloads\MaBase.bak"
+                                        />
+                                    </div>
+
+                                    <div style={{ paddingBottom: 2 }}>
+                                        <button type="submit" disabled={backingUp} style={{
+                                            background: '#2e7d32', border: 'none', color: '#fff', padding: '8px 24px',
+                                            borderRadius: 4, fontSize: 13, height: 34,
+                                            cursor: backingUp ? 'not-allowed' : 'pointer', opacity: backingUp ? 0.7 : 1,
+                                            whiteSpace: 'nowrap'
+                                        }}>
+                                            {backingUp ? 'En cours...' : 'Sauvegarder'}
+                                        </button>
+                                    </div>
 
                                 </form>
+
+                                {/* Messages de retour alignés en dessous */}
+                                <div style={{ marginTop: 16 }}>
+                                    {backupError && (
+                                        <div style={{ background: '#fff0f0', border: '1px solid #ffcccc', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#c00' }}>
+                                            {backupError}
+                                        </div>
+                                    )}
+                                    {backupSuccess && (
+                                        <div style={{ background: '#f0fff4', border: '1px solid #b2dfdb', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#2e7d32' }}>
+                                            {backupSuccess}
+                                        </div>
+                                    )}
+                                </div>
+
                             </div>
                         </>
                     )}
@@ -312,7 +413,7 @@ export default function Dashboard({ onDisconnected }: Props) {
                 </div>
             </div>
 
-            {/* Modal suppression */}
+            {/* Modal suppression ... */}
             {confirmDelete && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
                     <div style={{ background: '#fff', borderRadius: 8, padding: 28, width: 380, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
@@ -338,7 +439,6 @@ export default function Dashboard({ onDisconnected }: Props) {
                     </div>
                 </div>
             )}
-
         </div>
     )
 }

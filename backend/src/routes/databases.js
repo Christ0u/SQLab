@@ -100,4 +100,41 @@ router.post('/', async (req, res) => {
     }
 })
 
+router.post('/backup', async (req, res) => {
+    if (!req.session.connected) {
+        return res.status(401).json({ error: 'Non connecté' })
+    }
+
+    const { database, type, destination } = req.body
+
+    if (!database) return res.status(400).json({ error: 'La base de données est obligatoire.' })
+    if (!destination) return res.status(400).json({ error: 'La destination est obligatoire.' })
+
+    try {
+        const pool = await sql.connect(req.session.sqlConfig)
+        let query = ''
+
+        // On adapte la requête SQL en fonction du type de sauvegarde
+        switch (type) {
+            case 'FULL':
+                // INIT écrase le fichier s'il existe déjà. Retire-le si tu veux ajouter au fichier existant.
+                query = `BACKUP DATABASE [${database}] TO DISK = N'${destination}' WITH INIT, FORMAT`
+                break
+            case 'DIFFERENTIAL':
+                query = `BACKUP DATABASE [${database}] TO DISK = N'${destination}' WITH DIFFERENTIAL`
+                break
+            case 'LOG':
+                query = `BACKUP LOG [${database}] TO DISK = N'${destination}'`
+                break
+            default:
+                return res.status(400).json({ error: 'Type de sauvegarde invalide.' })
+        }
+
+        await pool.request().query(query)
+        res.json({ success: true })
+    } catch (err) {
+        res.status(500).json({ error: err.message })
+    }
+})
+
 module.exports = router
