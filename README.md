@@ -72,8 +72,10 @@ SESSION_SECRET="my-session-secret"
 A la racine du répertoire du projet :
 
 ```bash
-docker-compose up --build
+docker-compose up -d --build
 ```
+
+L'applicaton web est accessible à l'adresse [http://localhost/](http://localhost/).
 
 ## Arrêter l'application
 

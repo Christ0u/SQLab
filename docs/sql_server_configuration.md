@@ -35,6 +35,8 @@ Cliquer sur `OK` à l'affichage de l'avertissement.
 
 ![SQL Server Configuration Manager](./pictures/005.png)
 
+Cliquer sur `OK`.
+
 Cliquer droit sur `TCP/IP` et sélectionner `Enable`.
 
 Cliquer sur `OK` à l'affichage de l'avertissement.
