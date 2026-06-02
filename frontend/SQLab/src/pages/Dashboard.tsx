@@ -8,28 +8,54 @@ interface Database {
     last_backup: string | null
 }
 
+interface CreateForm {
+    name: string
+    collation: string
+    recoveryModel: string
+}
+
 interface Props {
     onDisconnected: () => void
 }
 
 const SYSTEM_DATABASES = ['master', 'model', 'msdb', 'tempdb']
 
+const COLLATIONS = [
+    'French_CI_AS',
+    'French_CS_AS',
+    'SQL_Latin1_General_CP1_CI_AS',
+    'SQL_Latin1_General_CP1_CS_AS',
+    'Latin1_General_CI_AS',
+]
+
+const RECOVERY_MODELS = ['SIMPLE', 'FULL', 'BULK_LOGGED']
+
 export default function Dashboard({ onDisconnected }: Props) {
+    const [section, setSection] = useState<'list' | 'create'>('list')
+
+    // -- Liste --
     const [databases, setDatabases] = useState<Database[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [confirmDelete, setConfirmDelete] = useState<string | null>(null) // nom de la BDD à supprimer
+    const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
+
+    // -- Création --
+    const [createForm, setCreateForm] = useState<CreateForm>({
+        name: '',
+        collation: 'French_CI_AS',
+        recoveryModel: 'SIMPLE'
+    })
+    const [creating, setCreating] = useState(false)
+    const [createError, setCreateError] = useState<string | null>(null)
+    const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
     const loadDatabases = () => {
         setLoading(true)
         fetch('/api/databases', { credentials: 'include' })
             .then(r => r.json())
-            .then(data => {
-                if (Array.isArray(data)) setDatabases(data)
-                else setError(data.error)
-            })
+            .then(data => Array.isArray(data) ? setDatabases(data) : setError(data.error))
             .catch(() => setError('Impossible de charger les bases de données'))
             .finally(() => setLoading(false))
     }
@@ -47,20 +73,48 @@ export default function Dashboard({ onDisconnected }: Props) {
         setDeleteError(null)
         try {
             const res = await fetch(`/api/databases/${encodeURIComponent(confirmDelete)}`, {
-                method: 'DELETE',
-                credentials: 'include'
+                method: 'DELETE', credentials: 'include'
             })
             const data = await res.json()
-            if (!res.ok) {
-                setDeleteError(data.error)
-            } else {
-                setConfirmDelete(null)
-                loadDatabases() // rafraîchir la liste
-            }
+            if (!res.ok) setDeleteError(data.error)
+            else { setConfirmDelete(null); loadDatabases() }
         } catch {
             setDeleteError('Erreur lors de la suppression')
         } finally {
             setDeleting(false)
+        }
+    }
+
+    const handleCreateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        setCreateForm({ ...createForm, [e.target.name]: e.target.value })
+        setCreateError(null)
+        setCreateSuccess(null)
+    }
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setCreating(true)
+        setCreateError(null)
+        setCreateSuccess(null)
+        try {
+            const res = await fetch('/api/databases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(createForm)
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                setCreateError(data.error)
+            } else {
+                setCreateSuccess(`La base "${createForm.name}" a été créée avec succès.`)
+                setCreateForm({ name: '', collation: 'French_CI_AS', recoveryModel: 'SIMPLE' })
+                loadDatabases()
+            }
+        } catch {
+            setCreateError('Erreur lors de la création')
+        } finally {
+            setCreating(false)
         }
     }
 
@@ -69,16 +123,31 @@ export default function Dashboard({ onDisconnected }: Props) {
         return new Date(d).toLocaleString('fr-FR')
     }
 
-    const formatSize = (mb: number) => {
-        if (mb >= 1024) return `${(mb / 1024).toFixed(1)} Go`
-        return `${mb} Mo`
-    }
+    const formatSize = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} Go` : `${mb} Mo`
 
     const stateColor = (state: string) => {
-        if (state === 'ONLINE') return '#2e7d32'
-        if (state === 'OFFLINE') return '#c62828'
-        return '#f57c00'
+        switch (state) {
+            case 'ONLINE': return '#2e7d32'
+            case 'OFFLINE': return '#c62828'
+            case 'RESTORING': return '#1565c0'
+            case 'RECOVERING': return '#f57c00'
+            case 'SUSPECT': return '#6a1b9a'
+            case 'EMERGENCY': return '#e65100'
+            default: return '#888'
+        }
     }
+
+    const inputStyle = {
+        width: '100%',
+        marginTop: 4,
+        padding: '7px 10px',
+        border: '1px solid #ddd',
+        borderRadius: 4,
+        fontSize: 13,
+        boxSizing: 'border-box' as const
+    }
+
+    const labelStyle = { fontSize: 12, color: '#555', fontWeight: 500 }
 
     return (
         <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
@@ -101,140 +170,168 @@ export default function Dashboard({ onDisconnected }: Props) {
 
                 {/* Sidebar */}
                 <div style={{ width: 200, background: '#fff', borderRight: '1px solid #e0e0e0', padding: '16px 0' }}>
-                    <div style={{
-                        padding: '8px 20px', fontSize: 13, fontWeight: 600,
-                        background: '#f0f4ff', borderLeft: '3px solid #3f51b5', color: '#3f51b5'
-                    }}>
-                        Bases de données
-                    </div>
+                    {[
+                        { key: 'list', label: 'Bases de données' },
+                        { key: 'create', label: 'Créer une base' },
+                    ].map(item => (
+                        <div
+                            key={item.key}
+                            onClick={() => setSection(item.key as 'list' | 'create')}
+                            style={{
+                                padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                background: section === item.key ? '#f0f4ff' : 'transparent',
+                                borderLeft: section === item.key ? '3px solid #3f51b5' : '3px solid transparent',
+                                color: section === item.key ? '#3f51b5' : '#444',
+                            }}
+                        >
+                            {item.label}
+                        </div>
+                    ))}
                 </div>
 
                 {/* Contenu */}
                 <div style={{ flex: 1, padding: 24, overflow: 'auto' }}>
-                    <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Bases de données</h2>
 
-                    {loading && <p style={{ color: '#888', fontSize: 13 }}>Chargement...</p>}
-                    {error && (
-                        <div style={{
-                            background: '#fff0f0', border: '1px solid #ffcccc',
-                            borderRadius: 6, padding: '10px 14px', color: '#c00', fontSize: 13
-                        }}>
-                            {error}
-                        </div>
-                    )}
-
-                    {!loading && !error && (
-                        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                <thead>
-                                    <tr style={{ background: '#fafafa', borderBottom: '1px solid #e0e0e0' }}>
-                                        {['Nom', 'État', 'Taille', 'Modèle de récupération', 'Dernière sauvegarde', 'Actions'].map(h => (
-                                            <th key={h} style={{
-                                                padding: '10px 16px', textAlign: 'left',
-                                                fontWeight: 600, color: '#555', fontSize: 12
-                                            }}>
-                                                {h}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {databases.map((db, i) => {
-                                        const isSystem = SYSTEM_DATABASES.includes(db.name.toLowerCase())
-                                        return (
-                                            <tr key={db.name} style={{
-                                                borderBottom: i < databases.length - 1 ? '1px solid #f0f0f0' : 'none'
-                                            }}>
-                                                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{db.name}</td>
-                                                <td style={{ padding: '10px 16px' }}>
-                                                    <span style={{
-                                                        color: stateColor(db.state),
-                                                        background: stateColor(db.state) + '18',
-                                                        padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600
-                                                    }}>
-                                                        {db.state}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '10px 16px', color: '#444' }}>{formatSize(db.size_mb)}</td>
-                                                <td style={{ padding: '10px 16px', color: '#444' }}>{db.recovery_model}</td>
-                                                <td style={{ padding: '10px 16px', color: '#444' }}>{formatDate(db.last_backup)}</td>
-                                                <td style={{ padding: '10px 16px' }}>
-                                                    <button
-                                                        onClick={() => !isSystem && setConfirmDelete(db.name)}
-                                                        disabled={isSystem}
-                                                        title={isSystem ? 'Base système protégée' : `Supprimer ${db.name}`}
-                                                        style={{
-                                                            background: '#fff',
-                                                            border: `1px solid ${isSystem ? '#e0e0e0' : '#ffcccc'}`,
-                                                            color: isSystem ? '#bbb' : '#c00',
-                                                            padding: '4px 12px', borderRadius: 4,
-                                                            cursor: isSystem ? 'not-allowed' : 'pointer', fontSize: 12
-                                                        }}
-                                                    >
-                                                        Supprimer
-                                                    </button>
-                                                </td>
+                    {/* ── Section liste ── */}
+                    {section === 'list' && (
+                        <>
+                            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Bases de données</h2>
+                            {loading && <p style={{ color: '#888', fontSize: 13 }}>Chargement...</p>}
+                            {error && (
+                                <div style={{ background: '#fff0f0', border: '1px solid #ffcccc', borderRadius: 6, padding: '10px 14px', color: '#c00', fontSize: 13 }}>
+                                    {error}
+                                </div>
+                            )}
+                            {!loading && !error && (
+                                <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                        <thead>
+                                            <tr style={{ background: '#fafafa', borderBottom: '1px solid #e0e0e0' }}>
+                                                {['Nom', 'État', 'Taille', 'Modèle de récupération', 'Dernière sauvegarde', 'Actions'].map(h => (
+                                                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#555', fontSize: 12 }}>{h}</th>
+                                                ))}
                                             </tr>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                        </thead>
+                                        <tbody>
+                                            {databases.map((db, i) => {
+                                                const isSystem = SYSTEM_DATABASES.includes(db.name.toLowerCase())
+                                                return (
+                                                    <tr key={db.name} style={{ borderBottom: i < databases.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                                                        <td style={{ padding: '10px 16px', fontWeight: 500 }}>{db.name}</td>
+                                                        <td style={{ padding: '10px 16px' }}>
+                                                            <span style={{
+                                                                color: stateColor(db.state), background: stateColor(db.state) + '18',
+                                                                padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600
+                                                            }}>
+                                                                {db.state}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: '10px 16px', color: '#444' }}>{formatSize(db.size_mb)}</td>
+                                                        <td style={{ padding: '10px 16px', color: '#444' }}>{db.recovery_model}</td>
+                                                        <td style={{ padding: '10px 16px', color: '#444' }}>{formatDate(db.last_backup)}</td>
+                                                        <td style={{ padding: '10px 16px' }}>
+                                                            <button
+                                                                onClick={() => !isSystem && setConfirmDelete(db.name)}
+                                                                disabled={isSystem}
+                                                                title={isSystem ? 'Base système protégée' : `Supprimer ${db.name}`}
+                                                                style={{
+                                                                    background: '#fff',
+                                                                    border: `1px solid ${isSystem ? '#e0e0e0' : '#ffcccc'}`,
+                                                                    color: isSystem ? '#bbb' : '#c00',
+                                                                    padding: '4px 12px', borderRadius: 4,
+                                                                    cursor: isSystem ? 'not-allowed' : 'pointer', fontSize: 12
+                                                                }}
+                                                            >
+                                                                Supprimer
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </>
                     )}
+
+                    {/* ── Section création ── */}
+                    {section === 'create' && (
+                        <>
+                            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Créer une base de données</h2>
+                            <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 24, maxWidth: 560 }}>
+                                <form onSubmit={handleCreate}>
+
+                                    {/* Nom */}
+                                    <div style={{ marginBottom: 16 }}>
+                                        <label style={labelStyle}>Nom de la base <span style={{ color: '#c00' }}>*</span></label>
+                                        <input name="name" value={createForm.name} onChange={handleCreateChange}
+                                            placeholder="MaBase" required style={inputStyle} />
+                                    </div>
+
+                                    {/* Collation */}
+                                    <div style={{ marginBottom: 16 }}>
+                                        <label style={labelStyle}>Collation</label>
+                                        <select name="collation" value={createForm.collation} onChange={handleCreateChange} style={inputStyle}>
+                                            {COLLATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* Modèle de récupération */}
+                                    <div style={{ marginBottom: 24 }}>
+                                        <label style={labelStyle}>Modèle de récupération</label>
+                                        <select name="recoveryModel" value={createForm.recoveryModel} onChange={handleCreateChange} style={inputStyle}>
+                                            {RECOVERY_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {createError && (
+                                        <div style={{ background: '#fff0f0', border: '1px solid #ffcccc', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#c00', marginBottom: 16 }}>
+                                            {createError}
+                                        </div>
+                                    )}
+                                    {createSuccess && (
+                                        <div style={{ background: '#f0fff4', border: '1px solid #b2dfdb', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#2e7d32', marginBottom: 16 }}>
+                                            {createSuccess}
+                                        </div>
+                                    )}
+
+                                    <button type="submit" disabled={creating} style={{
+                                        background: '#3f51b5', border: 'none', color: '#fff',
+                                        padding: '8px 20px', borderRadius: 4, fontSize: 13,
+                                        cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.7 : 1
+                                    }}>
+                                        {creating ? 'Création...' : 'Créer la base de données'}
+                                    </button>
+
+                                </form>
+                            </div>
+                        </>
+                    )}
+
                 </div>
             </div>
 
-            {/* Modal de confirmation */}
+            {/* Modal suppression */}
             {confirmDelete && (
-                <div style={{
-                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
-                }}>
-                    <div style={{
-                        background: '#fff', borderRadius: 8, padding: 28,
-                        width: 380, boxShadow: '0 8px 32px rgba(0,0,0,0.18)'
-                    }}>
-                        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-                            Supprimer la base de données ?
-                        </h3>
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                    <div style={{ background: '#fff', borderRadius: 8, padding: 28, width: 380, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+                        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Supprimer la base de données ?</h3>
                         <p style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>
-                            La base <strong>{confirmDelete}</strong> sera supprimée définitivement.
-                            Cette action est irréversible.
+                            La base <strong>{confirmDelete}</strong> sera supprimée définitivement. Cette action est irréversible.
                         </p>
-
                         {deleteError && (
-                            <div style={{
-                                background: '#fff0f0', border: '1px solid #ffcccc',
-                                borderRadius: 6, padding: '8px 12px', fontSize: 12,
-                                color: '#c00', marginBottom: 12
-                            }}>
+                            <div style={{ background: '#fff0f0', border: '1px solid #ffcccc', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#c00', marginBottom: 12 }}>
                                 {deleteError}
                             </div>
                         )}
-
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-                            <button
-                                onClick={() => { setConfirmDelete(null); setDeleteError(null) }}
-                                disabled={deleting}
-                                style={{
-                                    background: '#f5f5f5',
-                                    border: '1px solid #ccc',
-                                    color: '#333',
-                                    padding: '6px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 13
-                                }}
-                            >
+                            <button onClick={() => { setConfirmDelete(null); setDeleteError(null) }} disabled={deleting}
+                                style={{ background: '#f5f5f5', border: '1px solid #ccc', color: '#333', padding: '6px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
                                 Annuler
                             </button>
-                            <button
-                                onClick={handleDeleteConfirm}
-                                disabled={deleting}
-                                style={{
-                                    background: '#c00', border: 'none', color: '#fff',
-                                    padding: '6px 16px', borderRadius: 4,
-                                    cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13,
-                                    opacity: deleting ? 0.7 : 1
-                                }}
-                            >
+                            <button onClick={handleDeleteConfirm} disabled={deleting}
+                                style={{ background: '#c00', border: 'none', color: '#fff', padding: '6px 16px', borderRadius: 4, cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 13, opacity: deleting ? 0.7 : 1 }}>
                                 {deleting ? 'Suppression...' : 'Supprimer définitivement'}
                             </button>
                         </div>

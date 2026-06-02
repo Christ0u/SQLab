@@ -63,4 +63,41 @@ router.delete('/:name', async (req, res) => {
     }
 })
 
+router.post('/', async (req, res) => {
+    if (!req.session.connected) {
+        return res.status(401).json({ error: 'Non connecté' })
+    }
+
+    // On ne récupère plus que le nom, la collation et le modèle
+    const { name, collation, recoveryModel } = req.body
+
+    if (!name) return res.status(400).json({ error: 'Le nom est obligatoire.' })
+    if (!/^[\w\-. ]+$/.test(name)) return res.status(400).json({ error: 'Nom invalide.' })
+    if (SYSTEM_DATABASES.includes(name.toLowerCase())) {
+        return res.status(403).json({ error: 'Ce nom est réservé.' })
+    }
+
+    const collate = collation || 'French_CI_AS'
+    const model = recoveryModel || 'SIMPLE'
+
+    try {
+        const pool = await sql.connect(req.session.sqlConfig)
+
+        // Création simple
+        await pool.request().query(`
+            CREATE DATABASE [${name}]
+            COLLATE ${collate}
+        `)
+
+        // Modèle de récupération
+        await pool.request().query(`
+            ALTER DATABASE [${name}] SET RECOVERY ${model}
+        `)
+
+        res.json({ success: true })
+    } catch (err) {
+        res.status(500).json({ error: err.message })
+    }
+})
+
 module.exports = router
