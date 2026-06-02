@@ -55,6 +55,18 @@ SQL_PASSWORD=""                       # Mot de passe d'un utilisateur SQL Server
 
 **Remarque** : Dans le cas d'une instance SQL Server installée localement, ne pas modifier la variable `host.docker.internal`.
 
+Dans un terminal, exécuter la commande suivante :
+
+```BASH
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+Copier la chaîne de caractères générée et la coller dans la variable `SESSION_SECRET` issue du fichier `.env` :
+
+```BASH
+SESSION_SECRET="my-session-secret"
+```
+
 ## Lancer l'application
 
 A la racine du répertoire du projet :
