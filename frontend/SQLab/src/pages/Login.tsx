@@ -20,6 +20,7 @@ export default function Login({ onConnected }: Props) {
     username: '',
     password: ''
   })
+
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -32,12 +33,14 @@ export default function Login({ onConnected }: Props) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
+    setError(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch('/api/auth/connect', {
         method: 'POST',
@@ -45,7 +48,9 @@ export default function Login({ onConnected }: Props) {
         credentials: 'include',
         body: JSON.stringify(form)
       })
+
       const data = await res.json()
+
       if (!res.ok) {
         setError(data.error || 'Erreur de connexion')
       } else {
@@ -58,79 +63,165 @@ export default function Login({ onConnected }: Props) {
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    marginTop: 6,
+    padding: '10px 12px',
+    border: '1px solid #d6d9e0',
+    borderRadius: 8,
+    fontSize: 13,
+    color: '#1f2937',
+    background: '#fff',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+  }
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: 12,
+    color: '#4b5563',
+    fontWeight: 600
+  }
+
+  const fieldStyle: React.CSSProperties = {
+    marginBottom: 14
+  }
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#f5f5f5'
-    }}>
-      <div style={{
-        background: '#fff',
-        border: '1px solid #e0e0e0',
-        borderRadius: 8,
-        padding: '32px',
-        width: 420
-      }}>
-        <h1 style={{ fontSize: 20, fontWeight: 500, marginBottom: 4 }}>SQLab</h1>
-        <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>
-          Connexion à une instance SQL Server
-        </p>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background:
+          'radial-gradient(circle at top left, rgba(63,81,181,0.35), transparent 34%), linear-gradient(135deg, #111827 0%, #1a1a2e 48%, #0f172a 100%)',
+        padding: 24,
+        boxSizing: 'border-box'
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 460,
+          background: 'rgba(255, 255, 255, 0.96)',
+          border: '1px solid rgba(255,255,255,0.35)',
+          borderRadius: 18,
+          padding: 32,
+          boxShadow: '0 24px 70px rgba(0,0,0,0.35)',
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <div style={{ marginBottom: 26 }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 42,
+              height: 42,
+              borderRadius: 12,
+              background: '#3f51b5',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: 16,
+              marginBottom: 14,
+              boxShadow: '0 8px 18px rgba(63,81,181,0.35)'
+            }}
+          >
+            SQL
+          </div>
+
+          <h1
+            style={{
+              fontSize: 26,
+              fontWeight: 800,
+              color: '#111827',
+              margin: 0,
+              letterSpacing: '-0.03em'
+            }}
+          >
+            SQLab
+          </h1>
+
+          <p
+            style={{
+              fontSize: 13,
+              color: '#6b7280',
+              margin: '6px 0 0 0',
+              lineHeight: 1.5
+            }}
+          >
+            Connecte-toi à une instance SQL Server pour gérer tes bases,
+            sauvegardes et logins.
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit}>
-
-          {/* Ligne 1 : Serveur / Instance / Port */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <div style={{ flex: 2 }}>
-              <label style={{ fontSize: 12, color: '#555' }}>Serveur</label>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1.2fr 0.8fr',
+              gap: 10,
+              marginBottom: 14
+            }}
+          >
+            <div>
+              <label style={labelStyle}>
+                Serveur <span style={{ color: '#dc2626' }}>*</span>
+              </label>
               <input
                 name="server"
                 value={form.server}
                 onChange={handleChange}
                 placeholder="my.sql.server"
                 required
-                style={{ width: '100%', marginTop: 4 }}
+                style={inputStyle}
               />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 12, color: '#555' }}>Instance</label>
+
+            <div>
+              <label style={labelStyle}>Instance</label>
               <input
                 name="instance"
                 value={form.instance}
                 onChange={handleChange}
-                placeholder="MY_INSTANCE"
-                style={{ width: '100%', marginTop: 4 }}
+                placeholder="SQLEXPRESS"
+                style={inputStyle}
               />
             </div>
-            <div style={{ width: 70 }}>
-              <label style={{ fontSize: 12, color: '#555' }}>Port</label>
+
+            <div>
+              <label style={labelStyle}>Port</label>
               <input
                 name="port"
                 value={form.port}
                 onChange={handleChange}
                 placeholder="1433"
-                style={{ width: '100%', marginTop: 4 }}
+                style={inputStyle}
               />
             </div>
           </div>
 
-          {/* Login */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, color: '#555' }}>Utilisateur</label>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>
+              Utilisateur <span style={{ color: '#dc2626' }}>*</span>
+            </label>
             <input
               name="username"
               value={form.username}
               onChange={handleChange}
               placeholder="login"
               required
-              style={{ width: '100%', marginTop: 4 }}
+              autoComplete="username"
+              style={inputStyle}
             />
           </div>
 
-          {/* Mot de passe */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 12, color: '#555' }}>Mot de passe</label>
+          <div style={{ marginBottom: 18 }}>
+            <label style={labelStyle}>
+              Mot de passe <span style={{ color: '#dc2626' }}>*</span>
+            </label>
             <input
               type="password"
               name="password"
@@ -138,28 +229,74 @@ export default function Login({ onConnected }: Props) {
               onChange={handleChange}
               placeholder="••••••••••••••"
               required
-              style={{ width: '100%', marginTop: 4 }}
+              autoComplete="current-password"
+              style={inputStyle}
             />
           </div>
 
           {error && (
-            <div style={{
-              background: '#fff0f0',
-              border: '1px solid #ffcccc',
-              borderRadius: 6,
-              padding: '8px 12px',
-              fontSize: 12,
-              color: '#c00',
-              marginBottom: 16
-            }}>
-              {error}
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 12,
+                color: '#b91c1c',
+                marginBottom: 16,
+                lineHeight: 1.4,
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start'
+              }}
+            >
+              <span style={{ fontWeight: 700 }}>Erreur :</span>
+              <span>{error}</span>
             </div>
           )}
 
-          <button type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Connexion...' : 'Se connecter'}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              height: 42,
+              border: 'none',
+              borderRadius: 10,
+              background: loading
+                ? '#9ca3af'
+                : 'linear-gradient(135deg, #3f51b5, #263a9f)',
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              boxShadow: loading
+                ? 'none'
+                : '0 10px 22px rgba(63,81,181,0.32)',
+              transition: 'transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease'
+            }}
+          >
+            {loading ? 'Connexion en cours...' : 'Se connecter'}
           </button>
 
+          <div
+            style={{
+              marginTop: 18,
+              paddingTop: 16,
+              borderTop: '1px solid #eef0f4',
+              textAlign: 'center'
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontSize: 11,
+                color: '#9ca3af'
+              }}
+            >
+              Les informations sont transmises au serveur via ta session active.
+            </p>
+          </div>
         </form>
       </div>
     </div>
