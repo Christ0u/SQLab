@@ -163,4 +163,57 @@ router.post('/query', async (req, res) => {
     }
 })
 
+router.get('/logins', async (req, res) => {
+    try {
+        const pool = await sql.connect(req.session.sqlConfig);
+        const result = await pool.request().query(`
+            SELECT 
+                name, 
+                type_desc, 
+                is_disabled, 
+                create_date 
+            FROM sys.server_principals 
+            WHERE type IN ('S', 'U', 'G') 
+            AND name NOT LIKE '##%' 
+            AND name NOT LIKE 'NT SERVICE\\%'
+            AND name NOT LIKE 'NT AUTHORITY\\%'
+            ORDER BY name
+        `);
+
+        res.json(result.recordset);
+    } catch (err) {
+        console.error('Erreur lors de la récupération des logins:', err);
+        res.status(500).json({ error: 'Impossible de récupérer la liste des logins' });
+    }
+});
+
+router.patch('/logins/:name', async (req, res) => {
+    if (!req.session.connected) return res.status(401).json({ error: 'Non connecté' });
+
+    const { name } = req.params;
+    const { action } = req.body; // 'ENABLE' ou 'DISABLE'
+
+    try {
+        const pool = await sql.connect(req.session.sqlConfig);
+
+        // Sécurité : on empêche toute modification sur les logins système
+        const check = await pool.request().query(`
+            SELECT name FROM sys.server_principals 
+            WHERE name = '${name.replace(/'/g, "''")}' 
+            AND (name LIKE '##%' OR name LIKE 'NT SERVICE\\%' OR name LIKE 'NT AUTHORITY\\%')
+        `);
+
+        if (check.recordset.length > 0) {
+            return res.status(403).json({ error: 'Modification impossible sur un compte système.' });
+        }
+
+        const status = action === 'ENABLE' ? 'ENABLE' : 'DISABLE';
+        await pool.request().query(`ALTER LOGIN [${name}] ${status}`);
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router
